@@ -88,27 +88,42 @@ string formatTime(int totalSeconds) {
 
 void runBenchmark(const vector<TrainArrival>& allArrivals) {
     cout << "\n--- Benchmark: Priority Queue vs Sorted Vector ---\n";
-    cout << "Dataset size: " << allArrivals.size() << " arrivals\n\n";
+    cout << "Dataset size: " << allArrivals.size() << " arrivals\n";
+    cout << "Running 1000 iterations each...\n\n";
 
-    auto start = high_resolution_clock::now();
-    priority_queue<TrainArrival, vector<TrainArrival>, greater<TrainArrival>> pq;
-    for (auto& a : allArrivals) pq.push(a);
-    TrainArrival top = pq.top();
-    auto end = high_resolution_clock::now();
-    long pqTime = duration_cast<microseconds>(end - start).count();
+    const int ITERATIONS = 1000;
 
-    start = high_resolution_clock::now();
-    vector<TrainArrival> sortedVec = allArrivals;
-    sort(sortedVec.begin(), sortedVec.end());
-    auto end2 = high_resolution_clock::now();
-    long vecTime = duration_cast<microseconds>(end2 - start).count();
+    // Priority Queue - 1000 iterations
+    long totalPQ = 0;
+    for (int i = 0; i < ITERATIONS; i++) {
+        auto start = high_resolution_clock::now();
+        priority_queue<TrainArrival, vector<TrainArrival>, greater<TrainArrival>> pq;
+        for (auto& a : allArrivals) pq.push(a);
+        TrainArrival top = pq.top();
+        auto end = high_resolution_clock::now();
+        totalPQ += duration_cast<microseconds>(end - start).count();
+    }
+    long avgPQ = totalPQ / ITERATIONS;
 
-    cout << "Priority Queue insertion + peek: " << pqTime << " microseconds\n";
-    cout << "Sorted Vector full sort:         " << vecTime << " microseconds\n\n";
-    if (pqTime < vecTime)
-        cout << "Priority Queue faster by " << vecTime - pqTime << " microseconds\n";
+    // Sorted Vector - 1000 iterations
+    long totalVec = 0;
+    for (int i = 0; i < ITERATIONS; i++) {
+        auto start = high_resolution_clock::now();
+        vector<TrainArrival> sortedVec = allArrivals;
+        sort(sortedVec.begin(), sortedVec.end());
+        auto end = high_resolution_clock::now();
+        totalVec += duration_cast<microseconds>(end - start).count();
+    }
+    long avgVec = totalVec / ITERATIONS;
+
+    cout << "Priority Queue avg (1000 runs): " << avgPQ << " microseconds\n";
+    cout << "Sorted Vector avg (1000 runs):  " << avgVec << " microseconds\n\n";
+
+    if (avgPQ < avgVec)
+        cout << "Priority Queue faster by " << avgVec - avgPQ << " microseconds on average\n";
     else
-        cout << "Sorted Vector faster by " << pqTime - vecTime << " microseconds\n";
+        cout << "Sorted Vector faster by " << avgPQ - avgVec << " microseconds on average\n";
+
     cout << "\nKey insight: Priority Queue is O(log n) per insert vs O(n log n) to re-sort.\n";
     cout << "For real-time streaming data that updates constantly, Priority Queue wins.\n\n";
 }
