@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <iomanip>
 #include <curl/curl.h>
 #include "json.hpp"
 
@@ -87,45 +88,299 @@ string formatTime(int totalSeconds) {
 }
 
 void runBenchmark(const vector<TrainArrival>& allArrivals) {
-    cout << "\n--- Benchmark: Priority Queue vs Sorted Vector ---\n";
-    cout << "Dataset size: " << allArrivals.size() << " arrivals\n";
-    cout << "Running 1000 iterations each...\n\n";
 
     const int ITERATIONS = 1000;
 
-    // Priority Queue - 1000 iterations
-    long totalPQ = 0;
-    for (int i = 0; i < ITERATIONS; i++) {
-        auto start = high_resolution_clock::now();
-        priority_queue<TrainArrival, vector<TrainArrival>, greater<TrainArrival>> pq;
-        for (auto& a : allArrivals) pq.push(a);
-        TrainArrival top = pq.top();
-        auto end = high_resolution_clock::now();
-        totalPQ += duration_cast<microseconds>(end - start).count();
+    // Create larger simulated dataset for scalability testing
+    vector<TrainArrival> benchmarkData;
+
+    for (int i = 0; i < 100; i++) {
+        benchmarkData.insert(
+            benchmarkData.end(),
+            allArrivals.begin(),
+            allArrivals.end()
+        );
     }
-    long avgPQ = totalPQ / ITERATIONS;
 
-    // Sorted Vector - 1000 iterations
-    long totalVec = 0;
+    int n = benchmarkData.size();
+
+    cout << "\n========== BENCHMARK RESULTS ==========\n";
+
+    cout << "Dataset Size: "
+         << n
+         << " simulated arrivals\n\n";
+
+    cout << left
+         << setw(20) << "Operation"
+         << setw(20) << "Structure"
+         << setw(20) << "Latency"
+         << setw(25) << "Throughput"
+         << setw(20) << "Estimated Memory"
+         << "\n";
+
+    cout << string(105, '-') << "\n";
+
+    // =====================================================
+    // PRIORITY QUEUE BENCHMARK
+    // =====================================================
+
+    long long totalPQ = 0;
+
     for (int i = 0; i < ITERATIONS; i++) {
+
         auto start = high_resolution_clock::now();
-        vector<TrainArrival> sortedVec = allArrivals;
-        sort(sortedVec.begin(), sortedVec.end());
+
+        priority_queue<
+            TrainArrival,
+            vector<TrainArrival>,
+            greater<TrainArrival>
+        > pq;
+
+        for (auto& a : benchmarkData) {
+            pq.push(a);
+        }
+
+        volatile auto top = pq.top();
+
         auto end = high_resolution_clock::now();
-        totalVec += duration_cast<microseconds>(end - start).count();
+
+        totalPQ += duration_cast<nanoseconds>(
+            end - start
+        ).count();
     }
-    long avgVec = totalVec / ITERATIONS;
 
-    cout << "Priority Queue avg (1000 runs): " << avgPQ << " microseconds\n";
-    cout << "Sorted Vector avg (1000 runs):  " << avgVec << " microseconds\n\n";
+    double avgPQns =
+        (double)totalPQ / ITERATIONS;
 
-    if (avgPQ < avgVec)
-        cout << "Priority Queue faster by " << avgVec - avgPQ << " microseconds on average\n";
-    else
-        cout << "Sorted Vector faster by " << avgPQ - avgVec << " microseconds on average\n";
+    double avgPQms =
+        avgPQns / 1e6;
 
-    cout << "\nKey insight: Priority Queue is O(log n) per insert vs O(n log n) to re-sort.\n";
-    cout << "For real-time streaming data that updates constantly, Priority Queue wins.\n\n";
+    double pqThroughput =
+        n / (avgPQns / 1e9);
+
+    size_t pqMemory =
+        n * sizeof(TrainArrival);
+
+    cout << left
+         << setw(20) << "Insert + Peek"
+         << setw(20) << "PriorityQueue"
+         << setw(20)
+         << (to_string(avgPQms).substr(0, 8) + "ms")
+         << setw(25)
+         << (to_string((long long)pqThroughput) + " ops/sec")
+         << setw(20)
+         << (to_string(pqMemory) + " bytes")
+         << "\n";
+
+    // =====================================================
+    // SORTED VECTOR BENCHMARK
+    // =====================================================
+
+    long long totalVec = 0;
+
+    for (int i = 0; i < ITERATIONS; i++) {
+
+        auto start = high_resolution_clock::now();
+
+        vector<TrainArrival> sortedVec =
+            benchmarkData;
+
+        sort(
+            sortedVec.begin(),
+            sortedVec.end()
+        );
+
+        volatile auto first = sortedVec[0];
+
+        auto end = high_resolution_clock::now();
+
+        totalVec += duration_cast<nanoseconds>(
+            end - start
+        ).count();
+    }
+
+    double avgVecns =
+        (double)totalVec / ITERATIONS;
+
+    double avgVecms =
+        avgVecns / 1e6;
+
+    double vecThroughput =
+        n / (avgVecns / 1e9);
+
+    size_t vecMemory =
+        n * sizeof(TrainArrival);
+
+    cout << left
+         << setw(20) << "Full Sort"
+         << setw(20) << "Sorted Vector"
+         << setw(20)
+         << (to_string(avgVecms).substr(0, 8) + "ms")
+         << setw(25)
+         << (to_string((long long)vecThroughput) + " ops/sec")
+         << setw(20)
+         << (to_string(vecMemory) + " bytes")
+         << "\n";
+
+    // =====================================================
+    // HASH MAP LOOKUP BENCHMARK
+    // =====================================================
+
+    vector<string> stationKeys;
+
+    for (auto& pair : nameToId) {
+        stationKeys.push_back(pair.first);
+    }
+
+    const int HASH_WORKLOAD = 100000;
+
+    long long totalHash = 0;
+
+    for (int i = 0; i < ITERATIONS; i++) {
+
+        auto start = high_resolution_clock::now();
+
+        for (int j = 0; j < HASH_WORKLOAD; j++) {
+
+            const string& key =
+                stationKeys[
+                    j % stationKeys.size()
+                ];
+
+            volatile auto result =
+                nameToId.find(key);
+        }
+
+        auto end = high_resolution_clock::now();
+
+        totalHash += duration_cast<nanoseconds>(
+            end - start
+        ).count();
+    }
+
+    double avgHashns =
+        (double)totalHash / ITERATIONS;
+
+    double avgHashms =
+        avgHashns / 1e6;
+
+    double hashThroughput =
+        HASH_WORKLOAD /
+        (avgHashns / 1e9);
+
+    size_t hashMemory =
+        nameToId.size() *
+        (sizeof(string) * 2);
+
+    cout << left
+         << setw(20) << "Lookup"
+         << setw(20) << "Hash Map"
+         << setw(20)
+         << (to_string(avgHashms).substr(0, 8) + "ms")
+         << setw(25)
+         << (to_string((long long)hashThroughput) + " ops/sec")
+         << setw(20)
+         << (to_string(hashMemory) + " bytes")
+         << "\n";
+
+    // =====================================================
+    // VECTOR LINEAR SEARCH BENCHMARK
+    // =====================================================
+
+    vector<pair<string,string>> nameVec(
+        nameToId.begin(),
+        nameToId.end()
+    );
+
+    long long totalLinear = 0;
+
+    for (int i = 0; i < ITERATIONS; i++) {
+
+        auto start = high_resolution_clock::now();
+
+        for (int j = 0; j < HASH_WORKLOAD; j++) {
+
+            const string& target =
+                stationKeys[
+                    j % stationKeys.size()
+                ];
+
+            volatile auto it =
+                find_if(
+                    nameVec.begin(),
+                    nameVec.end(),
+
+                    [&](const auto& q) {
+                        return q.first == target;
+                    }
+                );
+        }
+
+        auto end = high_resolution_clock::now();
+
+        totalLinear += duration_cast<nanoseconds>(
+            end - start
+        ).count();
+    }
+
+    double avgLinearns =
+        (double)totalLinear / ITERATIONS;
+
+    double avgLinearMs =
+        avgLinearns / 1e6;
+
+    double linearThroughput =
+        HASH_WORKLOAD /
+        (avgLinearns / 1e9);
+
+    size_t linearMemory =
+        nameVec.size() *
+        (sizeof(string) * 2);
+
+    cout << left
+         << setw(20) << "Linear Search"
+         << setw(20) << "Vector"
+         << setw(20)
+         << (to_string(avgLinearMs).substr(0, 8) + "ms")
+         << setw(25)
+         << (to_string((long long)linearThroughput) + " ops/sec")
+         << setw(20)
+         << (to_string(linearMemory) + " bytes")
+         << "\n";
+
+    cout << string(105, '=') << "\n\n";
+
+    // =====================================================
+    // ANALYSIS + TAKEAWAYS
+    // =====================================================
+
+    double speedup =
+        avgLinearns / avgHashns;
+
+    cout << fixed << setprecision(2);
+
+    cout << "Key Takeaways:\n\n";
+
+    cout << "Priority Queue:\n";
+    cout << "  - O(log n) insertion\n";
+    cout << "  - Avoids repeatedly sorting the entire dataset\n";
+    cout << "  - Efficiently retrieves the next arriving train\n\n";
+
+    cout << "Sorted Vector:\n";
+    cout << "  - O(n log n) sorting\n";
+    cout << "  - Fast for one-time sorting operations\n";
+    cout << "  - STL sort is highly optimized for smaller datasets\n\n";
+
+    cout << "Hash Map:\n";
+    cout << "  - Average O(1) lookup time\n";
+    cout << "  - "
+         << speedup
+         << "x faster than linear vector search\n";
+    cout << "  - Ideal for fast station name lookups\n\n";
+
+    cout << "Scalability Observation:\n";
+    cout << "  - As dataset size increases, optimized data structures\n";
+    cout << "    provide larger performance advantages.\n\n";
 }
 
 int main() {
@@ -137,7 +392,7 @@ int main() {
     for (int i = 0; i < (int)lineOrder.size(); i++) stationIndex[lineOrder[i]] = i;
 
     cout << "========================================\n";
-    cout << "   MBTA Green Line E - Route Finder\n";
+    cout << "   MBTA Green Line E - Train Scheduler\n";
     cout << "   Powered by Real-Time Arrival Data\n";
     cout << "========================================\n\n";
 
@@ -161,7 +416,6 @@ int main() {
     vector<TrainArrival> allArrivals;
     for (auto& p : data["data"]) {
         auto& attrs = p["attributes"];
-        // Use departure_time if available, fall back to arrival_time
         string timeStr = "";
         if (!attrs["departure_time"].is_null()) timeStr = attrs["departure_time"];
         else if (!attrs["arrival_time"].is_null()) timeStr = attrs["arrival_time"];
@@ -246,10 +500,8 @@ int main() {
             if (arrTime != -1) {
                 int travelMins = abs(arrTime - depTime) / 60;
                 cout << " | Arrives at " << formatTime(arrTime);
-                if (travelMins < 1)
-                    cout << " (< 1 min)";
-                else
-                    cout << " (" << travelMins << " min)";
+                if (travelMins < 1) cout << " (< 1 min)";
+                else cout << " (" << travelMins << " min)";
             }
             cout << "\n";
             shown++;
